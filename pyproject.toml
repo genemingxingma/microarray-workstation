@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "microarray-workstation"
+version = "0.1.0"
+description = "Cross-platform microarray chip analysis workstation"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  {name = "mamingxing", email = "devnull@example.com"}
+]
+dependencies = [
+  "numpy>=1.26",
+  "opencv-python>=4.9",
+  "pandas>=2.2",
+  "PySide6>=6.8",
+  "PyYAML>=6.0",
+  "requests>=2.32",
+  "tifffile>=2024.8.30"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "ruff>=0.6"
+]
+
+[project.scripts]
+microarray-workstation = "microarray_workstation.app:main"
+microarray-cli = "microarray_workstation.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

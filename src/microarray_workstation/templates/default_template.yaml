@@ -1,0 +1,11 @@
+name: default_microarray_template
+version: 1
+interpretation:
+  snr_threshold: 2.0
+  net_median_threshold: 200.0
+layout:
+  rows: 8
+  cols: 12
+  annotation:
+    R1C1: POS_CTRL
+    R1C2: NEG_CTRL

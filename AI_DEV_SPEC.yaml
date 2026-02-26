@@ -1,0 +1,45 @@
+project: microarray_workstation
+owner:
+  developer: mamingxing
+  company: iMyTest
+constraints:
+  fully_autonomous: true
+  max_days: 6
+  platforms: [windows, linux]
+  gui: required
+  ml_enabled: required
+delivery_sequence:
+  - day: 1
+    goals:
+      - bootstrap architecture
+      - gui image loading and basic analysis
+      - cli end-to-end export
+  - day: 2
+    goals:
+      - robust grid fitting
+      - quality control metrics
+      - template based interpretation
+  - day: 3
+    goals:
+      - ai spot classifier integration (onnx)
+      - manual correction tools in gui
+  - day: 4
+    goals:
+      - lims adapters and retry/idempotency
+      - report generator json/csv/pdf
+  - day: 5
+    goals:
+      - performance tuning batch mode
+      - regression tests with synthetic datasets
+  - day: 6
+    goals:
+      - packaging win/linux
+      - release artifacts
+      - smoke validation
+acceptance:
+  - command: microarray-cli analyze
+    expected: interpreted csv and summary json
+  - command: microarray-workstation
+    expected: gui opens and can run analysis
+  - command: microarray-cli submit-lims
+    expected: HTTP 2xx response with retry handling
