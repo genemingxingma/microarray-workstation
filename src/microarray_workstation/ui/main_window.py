@@ -263,6 +263,15 @@ class MainWindow(QMainWindow):
                         x1, y1 = points[r * cols + c]
                         x2, y2 = points[(r + 1) * cols + c]
                         cv2.line(bgr, (int(x1), int(y1)), (int(x2), int(y2)), (80, 220, 120), 1)
+                x_vals = [p[0] for p in points]
+                y_vals = [p[1] for p in points]
+                cv2.rectangle(
+                    bgr,
+                    (int(min(x_vals)), int(min(y_vals))),
+                    (int(max(x_vals)), int(max(y_vals))),
+                    (0, 200, 255),
+                    2,
+                )
 
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         h, w, c = rgb.shape

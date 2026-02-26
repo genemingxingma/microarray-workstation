@@ -18,6 +18,8 @@ class SpotMeasurement:
     col: int
     x: float
     y: float
+    signal_x: float
+    signal_y: float
     radius: float
     foreground_mean: float
     foreground_median: float

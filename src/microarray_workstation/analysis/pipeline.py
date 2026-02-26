@@ -47,10 +47,11 @@ def run_analysis(
         step_guess = int(max(3, min(spacing_min_px * 0.7, 32)))
     else:
         step_guess = int(max(5, min(gray.shape[1] / max(cols, 1), gray.shape[0] / max(rows, 1)) * 0.35))
-    grid = refine_grid_by_local_peaks(gray, grid, search_radius_px=step_guess)
+    refined = refine_grid_by_local_peaks(gray, grid, search_radius_px=step_guess)
     if grid_shift != (0.0, 0.0):
         grid = shift_grid(grid, dx=float(grid_shift[0]), dy=float(grid_shift[1]))
-    measurements = quantify_spots(gray, grid, rows=rows, cols=cols)
+        refined = shift_grid(refined, dx=float(grid_shift[0]), dy=float(grid_shift[1]))
+    measurements = quantify_spots(gray, grid, rows=rows, cols=cols, sample_spots=refined)
     df = _measurements_to_df(measurements)
     qc = compute_qc_metrics(df)
 
@@ -70,6 +71,12 @@ def run_analysis(
                 "spacing_min_px": float(spacing_min_px),
                 "spacing_max_px": float(spacing_max_px),
             },
+            "grid_bbox": {
+                "x_min": float(min(s.x for s in grid)) if grid else 0.0,
+                "x_max": float(max(s.x for s in grid)) if grid else 0.0,
+                "y_min": float(min(s.y for s in grid)) if grid else 0.0,
+                "y_max": float(max(s.y for s in grid)) if grid else 0.0,
+            },
             "qc": qc,
         },
     )
@@ -84,6 +91,8 @@ def _measurements_to_df(measurements) -> pd.DataFrame:
                 "col": m.col,
                 "x": m.x,
                 "y": m.y,
+                "signal_x": m.signal_x,
+                "signal_y": m.signal_y,
                 "radius": m.radius,
                 "foreground_mean": m.foreground_mean,
                 "foreground_median": m.foreground_median,

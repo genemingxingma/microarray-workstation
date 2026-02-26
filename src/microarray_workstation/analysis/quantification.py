@@ -18,17 +18,24 @@ def _annulus_mask(h: int, w: int, cx: float, cy: float, r_in: float, r_out: floa
     return (d2 >= r_in**2) & (d2 <= r_out**2)
 
 
-def quantify_spots(gray: np.ndarray, spots: list[Spot], rows: int, cols: int) -> list[SpotMeasurement]:
+def quantify_spots(
+    gray: np.ndarray,
+    spots: list[Spot],
+    rows: int,
+    cols: int,
+    sample_spots: list[Spot] | None = None,
+) -> list[SpotMeasurement]:
     h, w = gray.shape
     arr = gray.astype(np.float32)
     max_val = 65535.0 if gray.dtype in (np.uint16,) else float(np.max(arr) if np.max(arr) > 0 else 255.0)
 
     results: list[SpotMeasurement] = []
     for idx, spot in enumerate(spots):
-        r = max(2.0, float(spot.radius))
+        sample_spot = sample_spots[idx] if sample_spots and idx < len(sample_spots) else spot
+        r = max(2.0, float(sample_spot.radius))
 
-        fg_mask = _circle_mask(h, w, spot.x, spot.y, r)
-        bg_mask = _annulus_mask(h, w, spot.x, spot.y, r * 1.5, r * 2.5)
+        fg_mask = _circle_mask(h, w, sample_spot.x, sample_spot.y, r)
+        bg_mask = _annulus_mask(h, w, sample_spot.x, sample_spot.y, r * 1.5, r * 2.5)
 
         fg_vals = arr[fg_mask]
         bg_vals = arr[bg_mask]
@@ -57,6 +64,8 @@ def quantify_spots(gray: np.ndarray, spots: list[Spot], rows: int, cols: int) ->
                 col=col,
                 x=float(spot.x),
                 y=float(spot.y),
+                signal_x=float(sample_spot.x),
+                signal_y=float(sample_spot.y),
                 radius=r,
                 foreground_mean=fg_mean,
                 foreground_median=fg_median,
