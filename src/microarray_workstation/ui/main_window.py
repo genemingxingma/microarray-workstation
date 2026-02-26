@@ -37,6 +37,9 @@ class MainWindow(QMainWindow):
         self.current_image_path: str | None = None
         self.current_gray: np.ndarray | None = None
         self.latest_df = None
+        self.last_summary = None
+        self.grid_shift_x = 0.0
+        self.grid_shift_y = 0.0
 
         self._build_ui()
 
@@ -69,6 +72,31 @@ class MainWindow(QMainWindow):
         control_row.addWidget(self.template_input)
         control_row.addWidget(analyze_btn)
 
+        adjust_row = QHBoxLayout()
+        self.shift_step_input = QSpinBox()
+        self.shift_step_input.setRange(1, 50)
+        self.shift_step_input.setValue(2)
+
+        left_btn = QPushButton("Shift Left")
+        right_btn = QPushButton("Shift Right")
+        up_btn = QPushButton("Shift Up")
+        down_btn = QPushButton("Shift Down")
+        reset_btn = QPushButton("Reset Shift")
+
+        left_btn.clicked.connect(lambda: self.on_shift_grid(-self.shift_step_input.value(), 0))
+        right_btn.clicked.connect(lambda: self.on_shift_grid(self.shift_step_input.value(), 0))
+        up_btn.clicked.connect(lambda: self.on_shift_grid(0, -self.shift_step_input.value()))
+        down_btn.clicked.connect(lambda: self.on_shift_grid(0, self.shift_step_input.value()))
+        reset_btn.clicked.connect(self.on_reset_shift)
+
+        adjust_row.addWidget(QLabel("Shift(px)"))
+        adjust_row.addWidget(self.shift_step_input)
+        adjust_row.addWidget(left_btn)
+        adjust_row.addWidget(right_btn)
+        adjust_row.addWidget(up_btn)
+        adjust_row.addWidget(down_btn)
+        adjust_row.addWidget(reset_btn)
+
         self.image_label = QLabel("Open a microarray image to start")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setMinimumSize(600, 500)
@@ -78,6 +106,7 @@ class MainWindow(QMainWindow):
         self.log.setMaximumHeight(180)
 
         left.addLayout(control_row)
+        left.addLayout(adjust_row)
         left.addWidget(self.image_label, stretch=1)
         left.addWidget(self.log)
 
@@ -111,6 +140,8 @@ class MainWindow(QMainWindow):
 
         self.current_image_path = path
         self.current_gray = load_image(path)
+        self.grid_shift_x = 0.0
+        self.grid_shift_y = 0.0
         self._render_image(self.current_gray)
         self.log_info(f"Loaded image: {path}")
 
@@ -133,44 +164,82 @@ class MainWindow(QMainWindow):
         if self.current_gray is not None:
             self._render_image(self.current_gray)
 
+    def _resolve_template(self) -> dict:
+        template_path = self.template_input.text().strip()
+        if template_path:
+            return load_template(template_path)
+        return {
+            "interpretation": {
+                "snr_threshold": 2.0,
+                "net_median_threshold": 200.0,
+            }
+        }
+
+    def _run_analysis_and_render(self) -> None:
+        if not self.current_image_path:
+            return
+
+        rows = int(self.rows_input.value())
+        cols = int(self.cols_input.value())
+        result = run_analysis(
+            self.current_image_path,
+            rows=rows,
+            cols=cols,
+            grid_shift=(self.grid_shift_x, self.grid_shift_y),
+        )
+        df = to_dataframe(result)
+        template = self._resolve_template()
+        interpreted = interpret(df, template)
+        self.latest_df = interpreted
+
+        points = [(float(v["x"]), float(v["y"])) for _, v in interpreted.head(500).iterrows()]
+        if self.current_gray is not None:
+            self._render_image(self.current_gray, points=points)
+
+        self._fill_table(interpreted)
+        self.last_summary = summarize_calls(interpreted)
+        qc = result.metadata.get("qc", {})
+        self.log_info(
+            f"Analysis complete: total={self.last_summary['total']} positive={self.last_summary['positive']} "
+            f"negative={self.last_summary['negative']} review={self.last_summary['review']} "
+            f"qc={qc.get('qc_status', 'NA')} mean_snr={qc.get('mean_snr', 0)}"
+        )
+
     def on_analyze(self) -> None:
         if not self.current_image_path:
             QMessageBox.warning(self, "No Image", "Please open an image first.")
             return
 
-        rows = int(self.rows_input.value())
-        cols = int(self.cols_input.value())
-        template_path = self.template_input.text().strip()
-
         try:
-            result = run_analysis(self.current_image_path, rows=rows, cols=cols)
-            df = to_dataframe(result)
-
-            if template_path:
-                template = load_template(template_path)
-            else:
-                template = {
-                    "interpretation": {
-                        "snr_threshold": 2.0,
-                        "net_median_threshold": 200.0,
-                    }
-                }
-            interpreted = interpret(df, template)
-            self.latest_df = interpreted
-
-            points = [(float(v["x"]), float(v["y"])) for _, v in interpreted.head(500).iterrows()]
-            if self.current_gray is not None:
-                self._render_image(self.current_gray, points=points)
-
-            self._fill_table(interpreted)
-            summary = summarize_calls(interpreted)
-            self.log_info(
-                f"Analysis complete: total={summary['total']} positive={summary['positive']} "
-                f"negative={summary['negative']} review={summary['review']}"
-            )
+            self._run_analysis_and_render()
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "Analysis Failed", str(exc))
             self.log_info(f"Analysis failed: {exc}")
+
+    def on_shift_grid(self, dx: float, dy: float) -> None:
+        if not self.current_image_path:
+            QMessageBox.warning(self, "No Image", "Please open an image first.")
+            return
+
+        self.grid_shift_x += float(dx)
+        self.grid_shift_y += float(dy)
+        self.log_info(f"Grid shift updated: dx={self.grid_shift_x:.1f}, dy={self.grid_shift_y:.1f}")
+        try:
+            self._run_analysis_and_render()
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "Shift Re-analysis Failed", str(exc))
+            self.log_info(f"Shift re-analysis failed: {exc}")
+
+    def on_reset_shift(self) -> None:
+        self.grid_shift_x = 0.0
+        self.grid_shift_y = 0.0
+        self.log_info("Grid shift reset to dx=0.0, dy=0.0")
+        if self.current_image_path:
+            try:
+                self._run_analysis_and_render()
+            except Exception as exc:  # noqa: BLE001
+                QMessageBox.critical(self, "Reset Re-analysis Failed", str(exc))
+                self.log_info(f"Reset re-analysis failed: {exc}")
 
     def _fill_table(self, df) -> None:
         view_cols = ["row", "col", "net_median", "snr", "flag", "call", "target"]
@@ -199,7 +268,11 @@ class MainWindow(QMainWindow):
         json_path = Path(output_dir) / f"{stem}_summary.json"
 
         export_dataframe_csv(self.latest_df, csv_path)
-        summary = summarize_calls(self.latest_df)
-        export_json(summary, json_path)
+        summary = self.last_summary if self.last_summary is not None else summarize_calls(self.latest_df)
+        payload = {
+            "summary": summary,
+            "grid_shift": {"dx": self.grid_shift_x, "dy": self.grid_shift_y},
+        }
+        export_json(payload, json_path)
         self.log_info(f"Exported: {csv_path}")
         self.log_info(f"Exported: {json_path}")

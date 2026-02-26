@@ -6,7 +6,10 @@ MicroarrayWorkstation is a cross-platform desktop tool (Windows/Linux) for micro
 
 - Load TIFF chip images (GenePix/InnoScan-compatible scanner outputs)
 - Auto-detect spot candidates and infer a grid
+- Local peak refinement around predicted grid positions
+- Manual grid shift correction in GUI (left/right/up/down)
 - Quantify foreground/background grayscale per spot
+- Compute chip-level QC metrics (`mean_snr`, `pass_rate_pct`, `qc_status`)
 - Generate interpretation calls from YAML templates
 - Export raw and interpreted results (`CSV` + `JSON`)
 - Submit interpreted results to LIMS via REST API
@@ -17,7 +20,7 @@ MicroarrayWorkstation is a cross-platform desktop tool (Windows/Linux) for micro
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -e .[dev]
+pip install -e '.[dev]'
 microarray-workstation
 ```
 

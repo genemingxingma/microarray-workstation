@@ -32,12 +32,18 @@ def detect_spots(preprocessed: np.ndarray, min_radius: float = 2.0, max_radius: 
 
     spots: list[Spot] = []
     for kp in keypoints:
-        spots.append(Spot(x=float(kp.pt[0]), y=float(kp.pt[1]), radius=float(max(kp.size / 2, min_radius)), score=float(kp.response)))
+        spots.append(
+            Spot(
+                x=float(kp.pt[0]),
+                y=float(kp.pt[1]),
+                radius=float(max(kp.size / 2, min_radius)),
+                score=float(kp.response),
+            )
+        )
 
     if spots:
         return spots
 
-    # Fallback using local maxima for faint images
     dilated = cv2.dilate(preprocessed, np.ones((3, 3), dtype=np.uint8))
     maxima = (preprocessed == dilated) & (preprocessed > np.percentile(preprocessed, 95))
     ys, xs = np.where(maxima)
@@ -63,12 +69,16 @@ def infer_regular_grid(
             for c in range(cols)
         ]
 
-    xs = np.array([s.x for s in spots], dtype=np.float32)
-    ys = np.array([s.y for s in spots], dtype=np.float32)
-    rs = np.array([s.radius for s in spots], dtype=np.float32)
+    expected = rows * cols
+    sorted_spots = sorted(spots, key=lambda s: s.score, reverse=True)
+    selected = sorted_spots[: max(expected * 2, expected)]
 
-    min_x, max_x = float(xs.min()), float(xs.max())
-    min_y, max_y = float(ys.min()), float(ys.max())
+    xs = np.array([s.x for s in selected], dtype=np.float32)
+    ys = np.array([s.y for s in selected], dtype=np.float32)
+    rs = np.array([s.radius for s in selected], dtype=np.float32)
+
+    min_x, max_x = float(np.percentile(xs, 2.0)), float(np.percentile(xs, 98.0))
+    min_y, max_y = float(np.percentile(ys, 2.0)), float(np.percentile(ys, 98.0))
     grid_x = np.linspace(min_x, max_x, num=cols, dtype=np.float32)
     grid_y = np.linspace(min_y, max_y, num=rows, dtype=np.float32)
     radius = float(np.median(rs)) if rs.size else min(w / cols, h / rows) * 0.2
@@ -79,3 +89,40 @@ def infer_regular_grid(
             x, y = float(grid_x[c]), float(grid_y[r])
             inferred.append(Spot(x=x, y=y, radius=radius, score=1.0))
     return inferred
+
+
+def refine_grid_by_local_peaks(gray: np.ndarray, grid: list[Spot], search_radius_px: int = 5) -> list[Spot]:
+    if gray.ndim != 2:
+        raise ValueError("Expected grayscale image")
+
+    h, w = gray.shape
+    arr = gray.astype(np.float32)
+    refined: list[Spot] = []
+    for spot in grid:
+        x0 = int(round(spot.x))
+        y0 = int(round(spot.y))
+        x1 = max(0, x0 - search_radius_px)
+        x2 = min(w, x0 + search_radius_px + 1)
+        y1 = max(0, y0 - search_radius_px)
+        y2 = min(h, y0 + search_radius_px + 1)
+
+        window = arr[y1:y2, x1:x2]
+        if window.size == 0:
+            refined.append(spot)
+            continue
+
+        max_idx = int(np.argmax(window))
+        wy, wx = np.unravel_index(max_idx, window.shape)
+        refined.append(
+            Spot(
+                x=float(x1 + wx),
+                y=float(y1 + wy),
+                radius=spot.radius,
+                score=float(window[wy, wx]),
+            )
+        )
+    return refined
+
+
+def shift_grid(grid: list[Spot], dx: float = 0.0, dy: float = 0.0) -> list[Spot]:
+    return [Spot(x=s.x + dx, y=s.y + dy, radius=s.radius, score=s.score) for s in grid]
