@@ -44,3 +44,22 @@ def test_grid_shift_changes_coordinates(tmp_path: Path) -> None:
 
     assert abs(float(d2["x"].mean() - d1["x"].mean())) > 1.0
     assert abs(float(d2["y"].mean() - d1["y"].mean())) > 1.0
+
+
+def test_detection_params_are_accepted(tmp_path: Path) -> None:
+    p = tmp_path / "chip_params.tif"
+    _synthetic(p)
+
+    r = run_analysis(
+        p,
+        rows=8,
+        cols=12,
+        spot_diameter_min_px=6.0,
+        spot_diameter_max_px=20.0,
+        spacing_min_px=8.0,
+        spacing_max_px=80.0,
+    )
+    df = to_dataframe(r)
+    assert len(df) == 96
+    det = r.metadata.get("detection_params", {})
+    assert det.get("spot_diameter_min_px") == 6.0

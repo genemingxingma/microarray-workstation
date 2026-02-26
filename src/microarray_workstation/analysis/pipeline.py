@@ -23,12 +23,30 @@ def run_analysis(
     cols: int,
     channel: int | None = None,
     grid_shift: tuple[float, float] = (0.0, 0.0),
+    spot_diameter_min_px: float = 4.0,
+    spot_diameter_max_px: float = 24.0,
+    spacing_min_px: float = 0.0,
+    spacing_max_px: float = 0.0,
 ) -> AnalysisResult:
     gray = load_image(image_path, channel=channel)
     prep = preprocess(gray)
-    spots = detect_spots(prep)
-    grid = infer_regular_grid(spots, rows=rows, cols=cols, image_shape=gray.shape)
-    step_guess = int(max(5, min(gray.shape[1] / max(cols, 1), gray.shape[0] / max(rows, 1)) * 0.35))
+    min_radius = max(1.0, float(spot_diameter_min_px) / 2.0)
+    max_radius = max(min_radius + 0.5, float(spot_diameter_max_px) / 2.0)
+    spots = detect_spots(prep, min_radius=min_radius, max_radius=max_radius)
+    grid = infer_regular_grid(
+        spots,
+        rows=rows,
+        cols=cols,
+        image_shape=gray.shape,
+        spacing_min_px=float(spacing_min_px),
+        spacing_max_px=float(spacing_max_px),
+    )
+    if spacing_max_px > 0:
+        step_guess = int(max(3, min(spacing_max_px * 0.5, 32)))
+    elif spacing_min_px > 0:
+        step_guess = int(max(3, min(spacing_min_px * 0.7, 32)))
+    else:
+        step_guess = int(max(5, min(gray.shape[1] / max(cols, 1), gray.shape[0] / max(rows, 1)) * 0.35))
     grid = refine_grid_by_local_peaks(gray, grid, search_radius_px=step_guess)
     if grid_shift != (0.0, 0.0):
         grid = shift_grid(grid, dx=float(grid_shift[0]), dy=float(grid_shift[1]))
@@ -46,6 +64,12 @@ def run_analysis(
             "grid_size": rows * cols,
             "channel": channel,
             "grid_shift": {"dx": float(grid_shift[0]), "dy": float(grid_shift[1])},
+            "detection_params": {
+                "spot_diameter_min_px": float(spot_diameter_min_px),
+                "spot_diameter_max_px": float(spot_diameter_max_px),
+                "spacing_min_px": float(spacing_min_px),
+                "spacing_max_px": float(spacing_max_px),
+            },
             "qc": qc,
         },
     )

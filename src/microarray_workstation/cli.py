@@ -27,6 +27,10 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--output-dir", required=True)
     analyze.add_argument("--channel", required=False, type=int)
     analyze.add_argument("--ai-model", required=False, help="Optional ONNX model path")
+    analyze.add_argument("--spot-diameter-min", required=False, type=float, default=4.0)
+    analyze.add_argument("--spot-diameter-max", required=False, type=float, default=24.0)
+    analyze.add_argument("--spot-spacing-min", required=False, type=float, default=0.0)
+    analyze.add_argument("--spot-spacing-max", required=False, type=float, default=0.0)
 
     batch = sub.add_parser("analyze-batch", help="Batch analyze all chip images in a directory")
     batch.add_argument("--input-dir", required=True)
@@ -36,6 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("--output-dir", required=True)
     batch.add_argument("--channel", required=False, type=int)
     batch.add_argument("--ai-model", required=False)
+    batch.add_argument("--spot-diameter-min", required=False, type=float, default=4.0)
+    batch.add_argument("--spot-diameter-max", required=False, type=float, default=24.0)
+    batch.add_argument("--spot-spacing-min", required=False, type=float, default=0.0)
+    batch.add_argument("--spot-spacing-max", required=False, type=float, default=0.0)
 
     submit = sub.add_parser("submit-lims", help="Submit interpreted result to generic LIMS REST endpoint")
     submit.add_argument("--base-url", required=True)
@@ -89,6 +97,10 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         output_dir=args.output_dir,
         channel=args.channel,
         ai_model=args.ai_model,
+        spot_diameter_min_px=args.spot_diameter_min,
+        spot_diameter_max_px=args.spot_diameter_max,
+        spacing_min_px=args.spot_spacing_min,
+        spacing_max_px=args.spot_spacing_max,
     )
 
     print(f"raw_csv={out['raw_csv']}")
@@ -107,6 +119,10 @@ def _cmd_analyze_batch(args: argparse.Namespace) -> int:
         output_dir=args.output_dir,
         channel=args.channel,
         ai_model=args.ai_model,
+        spot_diameter_min_px=args.spot_diameter_min,
+        spot_diameter_max_px=args.spot_diameter_max,
+        spacing_min_px=args.spot_spacing_min,
+        spacing_max_px=args.spot_spacing_max,
     )
 
     for row in rows:

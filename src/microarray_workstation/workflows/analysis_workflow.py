@@ -29,8 +29,21 @@ def analyze_one_image(
     output_dir: str,
     channel: int | None,
     ai_model: str | None,
+    spot_diameter_min_px: float = 4.0,
+    spot_diameter_max_px: float = 24.0,
+    spacing_min_px: float = 0.0,
+    spacing_max_px: float = 0.0,
 ) -> dict[str, Any]:
-    result = run_analysis(image_path, rows=rows, cols=cols, channel=channel)
+    result = run_analysis(
+        image_path,
+        rows=rows,
+        cols=cols,
+        channel=channel,
+        spot_diameter_min_px=spot_diameter_min_px,
+        spot_diameter_max_px=spot_diameter_max_px,
+        spacing_min_px=spacing_min_px,
+        spacing_max_px=spacing_max_px,
+    )
     df = to_dataframe(result)
 
     gray = load_image(image_path, channel=channel)
@@ -96,6 +109,10 @@ def analyze_batch_images(
     output_dir: str,
     channel: int | None,
     ai_model: str | None,
+    spot_diameter_min_px: float = 4.0,
+    spot_diameter_max_px: float = 24.0,
+    spacing_min_px: float = 0.0,
+    spacing_max_px: float = 0.0,
 ) -> tuple[list[dict[str, Any]], str, str]:
     source = Path(input_dir)
     if not source.exists() or not source.is_dir():
@@ -118,6 +135,10 @@ def analyze_batch_images(
             output_dir=str(out_dir),
             channel=channel,
             ai_model=ai_model,
+            spot_diameter_min_px=spot_diameter_min_px,
+            spot_diameter_max_px=spot_diameter_max_px,
+            spacing_min_px=spacing_min_px,
+            spacing_max_px=spacing_max_px,
         )
         rows_out.append(
             {

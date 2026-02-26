@@ -52,6 +52,8 @@ class MainWindow(QMainWindow):
         self.last_summary = None
         self.grid_shift_x = 0.0
         self.grid_shift_y = 0.0
+        self.last_points: list[tuple[float, float]] | None = None
+        self.last_grid_shape: tuple[int, int] | None = None
 
         self._build_ui()
 
@@ -72,6 +74,18 @@ class MainWindow(QMainWindow):
         self.cols_input.setValue(12)
         self.template_input = QLineEdit()
         self.template_input.setPlaceholderText("Template YAML path (optional)")
+        self.spot_diameter_min_input = QSpinBox()
+        self.spot_diameter_min_input.setRange(1, 200)
+        self.spot_diameter_min_input.setValue(4)
+        self.spot_diameter_max_input = QSpinBox()
+        self.spot_diameter_max_input.setRange(2, 300)
+        self.spot_diameter_max_input.setValue(24)
+        self.spacing_min_input = QSpinBox()
+        self.spacing_min_input.setRange(0, 300)
+        self.spacing_min_input.setValue(0)
+        self.spacing_max_input = QSpinBox()
+        self.spacing_max_input.setRange(0, 500)
+        self.spacing_max_input.setValue(0)
 
         analyze_btn = QPushButton("Analyze")
         analyze_btn.clicked.connect(self.on_analyze)
@@ -83,6 +97,16 @@ class MainWindow(QMainWindow):
         control_row.addWidget(QLabel("Template"))
         control_row.addWidget(self.template_input)
         control_row.addWidget(analyze_btn)
+
+        detect_row = QHBoxLayout()
+        detect_row.addWidget(QLabel("Dia Min(px)"))
+        detect_row.addWidget(self.spot_diameter_min_input)
+        detect_row.addWidget(QLabel("Dia Max(px)"))
+        detect_row.addWidget(self.spot_diameter_max_input)
+        detect_row.addWidget(QLabel("Pitch Min(px)"))
+        detect_row.addWidget(self.spacing_min_input)
+        detect_row.addWidget(QLabel("Pitch Max(px)"))
+        detect_row.addWidget(self.spacing_max_input)
 
         adjust_row = QHBoxLayout()
         self.shift_step_input = QSpinBox()
@@ -158,6 +182,7 @@ class MainWindow(QMainWindow):
         self.log.setMaximumHeight(190)
 
         left.addLayout(control_row)
+        left.addLayout(detect_row)
         left.addLayout(adjust_row)
         left.addLayout(batch_input_row)
         left.addLayout(batch_output_row)
@@ -198,15 +223,37 @@ class MainWindow(QMainWindow):
         self.current_gray = load_image(path)
         self.grid_shift_x = 0.0
         self.grid_shift_y = 0.0
+        self.last_points = None
+        self.last_grid_shape = None
         self._render_image(self.current_gray)
         self.log_info(f"Loaded image: {path}")
 
-    def _render_image(self, gray: np.ndarray, points: list[tuple[float, float]] | None = None) -> None:
+    def _render_image(
+        self,
+        gray: np.ndarray,
+        points: list[tuple[float, float]] | None = None,
+        grid_shape: tuple[int, int] | None = None,
+    ) -> None:
         img = normalize_to_uint8(gray)
         bgr = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         if points:
             for x, y in points:
                 cv2.circle(bgr, (int(x), int(y)), 4, (0, 255, 255), 1)
+
+            # Draw full row/column mesh to visualize auto-recognized grid.
+            if grid_shape and len(points) == grid_shape[0] * grid_shape[1]:
+                rows, cols = grid_shape
+                for r in range(rows):
+                    row_points = points[r * cols : (r + 1) * cols]
+                    for c in range(cols - 1):
+                        x1, y1 = row_points[c]
+                        x2, y2 = row_points[c + 1]
+                        cv2.line(bgr, (int(x1), int(y1)), (int(x2), int(y2)), (80, 220, 120), 1)
+                for c in range(cols):
+                    for r in range(rows - 1):
+                        x1, y1 = points[r * cols + c]
+                        x2, y2 = points[(r + 1) * cols + c]
+                        cv2.line(bgr, (int(x1), int(y1)), (int(x2), int(y2)), (80, 220, 120), 1)
 
         rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
         h, w, c = rgb.shape
@@ -218,7 +265,7 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
         if self.current_gray is not None:
-            self._render_image(self.current_gray)
+            self._render_image(self.current_gray, self.last_points, self.last_grid_shape)
 
     def _resolve_template(self) -> dict:
         template_path = self.template_input.text().strip()
@@ -242,6 +289,10 @@ class MainWindow(QMainWindow):
             rows=rows,
             cols=cols,
             grid_shift=(self.grid_shift_x, self.grid_shift_y),
+            spot_diameter_min_px=float(self.spot_diameter_min_input.value()),
+            spot_diameter_max_px=float(self.spot_diameter_max_input.value()),
+            spacing_min_px=float(self.spacing_min_input.value()),
+            spacing_max_px=float(self.spacing_max_input.value()),
         )
         df = to_dataframe(result)
         if self.current_gray is None:
@@ -251,9 +302,11 @@ class MainWindow(QMainWindow):
         interpreted = interpret(ai_df, template)
         self.latest_df = interpreted
 
-        points = [(float(v["x"]), float(v["y"])) for _, v in interpreted.head(500).iterrows()]
+        points = [(float(v["x"]), float(v["y"])) for _, v in interpreted.iterrows()]
+        self.last_points = points
+        self.last_grid_shape = (rows, cols)
         if self.current_gray is not None:
-            self._render_image(self.current_gray, points=points)
+            self._render_image(self.current_gray, points=points, grid_shape=(rows, cols))
 
         self._fill_table(interpreted)
         self.last_summary = summarize_calls(interpreted)
@@ -339,6 +392,10 @@ class MainWindow(QMainWindow):
                 output_dir=output_dir,
                 channel=None,
                 ai_model=None,
+                spot_diameter_min_px=float(self.spot_diameter_min_input.value()),
+                spot_diameter_max_px=float(self.spot_diameter_max_input.value()),
+                spacing_min_px=float(self.spacing_min_input.value()),
+                spacing_max_px=float(self.spacing_max_input.value()),
             )
             batch_rows.append(
                 {

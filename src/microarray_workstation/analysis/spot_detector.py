@@ -50,11 +50,38 @@ def detect_spots(preprocessed: np.ndarray, min_radius: float = 2.0, max_radius: 
     return [Spot(x=float(x), y=float(y), radius=float(min_radius), score=float(preprocessed[y, x])) for y, x in zip(ys, xs)]
 
 
+def _filter_spots_by_spacing(
+    spots: list[Spot],
+    spacing_min_px: float = 0.0,
+    spacing_max_px: float = 0.0,
+) -> list[Spot]:
+    if len(spots) < 3 or (spacing_min_px <= 0 and spacing_max_px <= 0):
+        return spots
+
+    xs = np.array([s.x for s in spots], dtype=np.float32)
+    ys = np.array([s.y for s in spots], dtype=np.float32)
+    pts = np.stack([xs, ys], axis=1)
+    d2 = np.sum((pts[:, None, :] - pts[None, :, :]) ** 2, axis=2)
+    np.fill_diagonal(d2, np.inf)
+    nearest = np.sqrt(np.min(d2, axis=1))
+
+    kept: list[Spot] = []
+    for spot, nn in zip(spots, nearest):
+        if spacing_min_px > 0 and nn < spacing_min_px:
+            continue
+        if spacing_max_px > 0 and nn > spacing_max_px:
+            continue
+        kept.append(spot)
+    return kept if len(kept) >= 4 else spots
+
+
 def infer_regular_grid(
     spots: list[Spot],
     rows: int,
     cols: int,
     image_shape: tuple[int, int],
+    spacing_min_px: float = 0.0,
+    spacing_max_px: float = 0.0,
 ) -> list[Spot]:
     h, w = image_shape
     if rows <= 0 or cols <= 0:
@@ -69,8 +96,9 @@ def infer_regular_grid(
             for c in range(cols)
         ]
 
+    filtered = _filter_spots_by_spacing(spots, spacing_min_px=spacing_min_px, spacing_max_px=spacing_max_px)
     expected = rows * cols
-    sorted_spots = sorted(spots, key=lambda s: s.score, reverse=True)
+    sorted_spots = sorted(filtered, key=lambda s: s.score, reverse=True)
     selected = sorted_spots[: max(expected * 2, expected)]
 
     xs = np.array([s.x for s in selected], dtype=np.float32)
@@ -79,6 +107,28 @@ def infer_regular_grid(
 
     min_x, max_x = float(np.percentile(xs, 2.0)), float(np.percentile(xs, 98.0))
     min_y, max_y = float(np.percentile(ys, 2.0)), float(np.percentile(ys, 98.0))
+    center_x = float(np.median(xs))
+    center_y = float(np.median(ys))
+
+    span_x = max(1.0, max_x - min_x)
+    span_y = max(1.0, max_y - min_y)
+    pitch_x = span_x / max(cols - 1, 1)
+    pitch_y = span_y / max(rows - 1, 1)
+
+    if spacing_min_px > 0:
+        pitch_x = max(pitch_x, spacing_min_px)
+        pitch_y = max(pitch_y, spacing_min_px)
+    if spacing_max_px > 0:
+        pitch_x = min(pitch_x, spacing_max_px)
+        pitch_y = min(pitch_y, spacing_max_px)
+
+    span_x = pitch_x * max(cols - 1, 1)
+    span_y = pitch_y * max(rows - 1, 1)
+    min_x = max(0.0, center_x - span_x / 2.0)
+    max_x = min(float(w - 1), center_x + span_x / 2.0)
+    min_y = max(0.0, center_y - span_y / 2.0)
+    max_y = min(float(h - 1), center_y + span_y / 2.0)
+
     grid_x = np.linspace(min_x, max_x, num=cols, dtype=np.float32)
     grid_y = np.linspace(min_y, max_y, num=rows, dtype=np.float32)
     radius = float(np.median(rs)) if rs.size else min(w / cols, h / rows) * 0.2
