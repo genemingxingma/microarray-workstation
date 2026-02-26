@@ -4,15 +4,18 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pandas as pd
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QImage, QPixmap
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -24,15 +27,22 @@ from PySide6.QtWidgets import (
 
 from microarray_workstation.analysis.image_loader import load_image, normalize_to_uint8
 from microarray_workstation.analysis.pipeline import run_analysis, to_dataframe
+from microarray_workstation.analysis.ai_classifier import classify_spot_quality
+from microarray_workstation.integration.lims_client import LIMSClient
 from microarray_workstation.io.exporters import export_dataframe_csv, export_json
 from microarray_workstation.rules.interpreter import interpret, load_template, summarize_calls
+from microarray_workstation.workflows.analysis_workflow import (
+    IMAGE_SUFFIXES,
+    analyze_one_image,
+    list_summary_payloads,
+)
 
 
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Microarray Workstation")
-        self.resize(1400, 900)
+        self.resize(1500, 920)
 
         self.current_image_path: str | None = None
         self.current_gray: np.ndarray | None = None
@@ -97,16 +107,60 @@ class MainWindow(QMainWindow):
         adjust_row.addWidget(down_btn)
         adjust_row.addWidget(reset_btn)
 
+        batch_input_row = QHBoxLayout()
+        self.batch_input_dir = QLineEdit()
+        self.batch_input_dir.setPlaceholderText("Batch Input Dir")
+        browse_batch_in_btn = QPushButton("Browse In")
+        browse_batch_in_btn.clicked.connect(self.on_browse_batch_input)
+        batch_input_row.addWidget(QLabel("Batch In"))
+        batch_input_row.addWidget(self.batch_input_dir)
+        batch_input_row.addWidget(browse_batch_in_btn)
+
+        batch_output_row = QHBoxLayout()
+        self.batch_output_dir = QLineEdit()
+        self.batch_output_dir.setPlaceholderText("Batch Output Dir")
+        browse_batch_out_btn = QPushButton("Browse Out")
+        browse_batch_out_btn.clicked.connect(self.on_browse_batch_output)
+        run_batch_btn = QPushButton("Run Batch")
+        run_batch_btn.clicked.connect(self.on_run_batch)
+        batch_output_row.addWidget(QLabel("Batch Out"))
+        batch_output_row.addWidget(self.batch_output_dir)
+        batch_output_row.addWidget(browse_batch_out_btn)
+        batch_output_row.addWidget(run_batch_btn)
+
+        lims_row = QHBoxLayout()
+        self.lims_base_url_input = QLineEdit()
+        self.lims_base_url_input.setPlaceholderText("LIMS Base URL")
+        self.lims_endpoint_input = QLineEdit()
+        self.lims_endpoint_input.setPlaceholderText("LIMS Endpoint, e.g. /api/results")
+        self.lims_token_input = QLineEdit()
+        self.lims_token_input.setPlaceholderText("Token (optional)")
+        submit_batch_btn = QPushButton("Submit Batch To LIMS")
+        submit_batch_btn.clicked.connect(self.on_submit_batch_lims)
+        lims_row.addWidget(self.lims_base_url_input)
+        lims_row.addWidget(self.lims_endpoint_input)
+        lims_row.addWidget(self.lims_token_input)
+        lims_row.addWidget(submit_batch_btn)
+
+        self.batch_progress = QProgressBar()
+        self.batch_progress.setMinimum(0)
+        self.batch_progress.setMaximum(100)
+        self.batch_progress.setValue(0)
+
         self.image_label = QLabel("Open a microarray image to start")
         self.image_label.setAlignment(Qt.AlignCenter)
-        self.image_label.setMinimumSize(600, 500)
+        self.image_label.setMinimumSize(620, 480)
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
-        self.log.setMaximumHeight(180)
+        self.log.setMaximumHeight(190)
 
         left.addLayout(control_row)
         left.addLayout(adjust_row)
+        left.addLayout(batch_input_row)
+        left.addLayout(batch_output_row)
+        left.addLayout(lims_row)
+        left.addWidget(self.batch_progress)
         left.addWidget(self.image_label, stretch=1)
         left.addWidget(self.log)
 
@@ -188,8 +242,11 @@ class MainWindow(QMainWindow):
             grid_shift=(self.grid_shift_x, self.grid_shift_y),
         )
         df = to_dataframe(result)
+        if self.current_gray is None:
+            self.current_gray = load_image(self.current_image_path)
+        ai_df, _ = classify_spot_quality(self.current_gray, df, model_path=None)
         template = self._resolve_template()
-        interpreted = interpret(df, template)
+        interpreted = interpret(ai_df, template)
         self.latest_df = interpreted
 
         points = [(float(v["x"]), float(v["y"])) for _, v in interpreted.head(500).iterrows()]
@@ -241,8 +298,97 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Reset Re-analysis Failed", str(exc))
                 self.log_info(f"Reset re-analysis failed: {exc}")
 
+    def on_browse_batch_input(self) -> None:
+        directory = QFileDialog.getExistingDirectory(self, "Select Batch Input Directory")
+        if directory:
+            self.batch_input_dir.setText(directory)
+
+    def on_browse_batch_output(self) -> None:
+        directory = QFileDialog.getExistingDirectory(self, "Select Batch Output Directory")
+        if directory:
+            self.batch_output_dir.setText(directory)
+
+    def on_run_batch(self) -> None:
+        input_dir = self.batch_input_dir.text().strip()
+        output_dir = self.batch_output_dir.text().strip()
+        if not input_dir or not output_dir:
+            QMessageBox.warning(self, "Missing Path", "Please set batch input/output directory.")
+            return
+
+        image_files = [p for p in sorted(Path(input_dir).iterdir()) if p.suffix.lower() in IMAGE_SUFFIXES]
+        if not image_files:
+            QMessageBox.warning(self, "No Images", f"No supported image files in {input_dir}")
+            return
+
+        rows = int(self.rows_input.value())
+        cols = int(self.cols_input.value())
+        template_path = self.template_input.text().strip() or None
+
+        self.batch_progress.setMaximum(len(image_files))
+        self.batch_progress.setValue(0)
+
+        batch_rows = []
+        for idx, image in enumerate(image_files, start=1):
+            out = analyze_one_image(
+                image_path=str(image),
+                rows=rows,
+                cols=cols,
+                template_path=template_path,
+                output_dir=output_dir,
+                channel=None,
+                ai_model=None,
+            )
+            batch_rows.append(
+                {
+                    "image": out["image"],
+                    "qc_status": out["qc_status"],
+                    "positive": out["summary"]["positive"],
+                    "negative": out["summary"]["negative"],
+                    "review": out["summary"]["review"],
+                    "ai_mode": out["ai_summary"]["mode"],
+                    "ai_mean_score": out["ai_summary"]["mean_ai_score"],
+                    "summary_json": out["summary_json"],
+                }
+            )
+            self.batch_progress.setValue(idx)
+            self.log_info(f"Batch processed {idx}/{len(image_files)}: {image.name}")
+            QApplication.processEvents()
+
+        out_dir = Path(output_dir)
+        batch_df = pd.DataFrame(batch_rows)
+        summary_csv = out_dir / "batch_summary.csv"
+        summary_json = out_dir / "batch_summary.json"
+        export_dataframe_csv(batch_df, summary_csv)
+        export_json({"total_images": len(batch_rows), "records": batch_rows}, summary_json)
+        self.log_info(f"Batch complete: {len(batch_rows)} files")
+        self.log_info(f"Batch summary: {summary_csv}")
+
+    def on_submit_batch_lims(self) -> None:
+        output_dir = self.batch_output_dir.text().strip()
+        base_url = self.lims_base_url_input.text().strip()
+        endpoint = self.lims_endpoint_input.text().strip()
+        token = self.lims_token_input.text().strip() or None
+
+        if not output_dir or not base_url or not endpoint:
+            QMessageBox.warning(self, "Missing LIMS Info", "Set batch output dir, base URL and endpoint first.")
+            return
+
+        try:
+            payloads = list_summary_payloads(output_dir)
+            client = LIMSClient(base_url=base_url, token=token)
+            result = client.submit_batch_results(endpoint=endpoint, payloads=payloads)
+            out_path = Path(output_dir) / "lims_submit_summary.json"
+            export_json(result, out_path)
+            self.log_info(
+                f"LIMS submit complete: total={result['total']} success={result['success']} failed={result['failed']}"
+            )
+            self.log_info(f"LIMS summary: {out_path}")
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "LIMS Batch Submit Failed", str(exc))
+            self.log_info(f"LIMS batch submit failed: {exc}")
+
     def _fill_table(self, df) -> None:
-        view_cols = ["row", "col", "net_median", "snr", "flag", "call", "target"]
+        view_cols = ["row", "col", "net_median", "snr", "ai_score", "ai_label", "flag", "call", "target"]
         self.table.clear()
         self.table.setColumnCount(len(view_cols))
         self.table.setHorizontalHeaderLabels(view_cols)
@@ -250,7 +396,10 @@ class MainWindow(QMainWindow):
 
         for r in range(len(df)):
             for c, col in enumerate(view_cols):
-                self.table.setItem(r, c, QTableWidgetItem(str(df.iloc[r][col])))
+                if col in df.columns:
+                    self.table.setItem(r, c, QTableWidgetItem(str(df.iloc[r][col])))
+                else:
+                    self.table.setItem(r, c, QTableWidgetItem(""))
 
         self.table.resizeColumnsToContents()
 

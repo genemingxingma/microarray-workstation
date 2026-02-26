@@ -40,3 +40,29 @@ class LIMSClient:
                 continue
 
         raise RuntimeError(f"Failed to submit LIMS result after {retries} attempts: {last_err}")
+
+    def submit_batch_results(
+        self,
+        endpoint: str,
+        payloads: list[tuple[str, dict[str, Any]]],
+        retries: int = 3,
+    ) -> dict[str, Any]:
+        records: list[dict[str, Any]] = []
+        success = 0
+        failed = 0
+
+        for source, payload in payloads:
+            try:
+                resp = self.submit_result(endpoint=endpoint, payload=payload, retries=retries)
+                records.append({"source": source, "status": "ok", "response": resp})
+                success += 1
+            except Exception as exc:  # noqa: BLE001
+                records.append({"source": source, "status": "failed", "error": str(exc)})
+                failed += 1
+
+        return {
+            "total": len(payloads),
+            "success": success,
+            "failed": failed,
+            "records": records,
+        }

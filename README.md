@@ -17,6 +17,7 @@ MicroarrayWorkstation is a cross-platform desktop tool (Windows/Linux) for micro
 - Export raw and interpreted results (`CSV` + `JSON`)
 - Submit interpreted results to LIMS via REST API
 - Batch analysis mode for directories of chip images
+- Batch LIMS submission for `*_summary.json`
 - GUI and CLI workflows
 
 ## Quick start
@@ -39,7 +40,7 @@ microarray-cli analyze \
   --cols 48
 ```
 
-Batch example:
+Batch analysis example:
 
 ```bash
 microarray-cli analyze-batch \
@@ -49,10 +50,20 @@ microarray-cli analyze-batch \
   --cols 48
 ```
 
+Batch LIMS submit example:
+
+```bash
+microarray-cli submit-lims-batch \
+  --base-url http://lims.local \
+  --endpoint /api/results \
+  --input-dir ./outputs
+```
+
 ## Architecture
 
 - `src/microarray_workstation/ui`: PySide6 desktop interface
 - `src/microarray_workstation/analysis`: image processing, quantification, QC, AI scoring
+- `src/microarray_workstation/workflows`: reusable single/batch orchestration
 - `src/microarray_workstation/rules`: template-driven interpretation engine
 - `src/microarray_workstation/integration`: LIMS API connector
 - `src/microarray_workstation/io`: export utilities
