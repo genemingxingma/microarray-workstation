@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -74,12 +75,18 @@ class MainWindow(QMainWindow):
         self.cols_input.setValue(12)
         self.template_input = QLineEdit()
         self.template_input.setPlaceholderText("Template YAML path (optional)")
-        self.spot_diameter_min_input = QSpinBox()
-        self.spot_diameter_min_input.setRange(1, 200)
-        self.spot_diameter_min_input.setValue(4)
-        self.spot_diameter_max_input = QSpinBox()
-        self.spot_diameter_max_input.setRange(2, 300)
-        self.spot_diameter_max_input.setValue(24)
+        self.um_per_px_input = QDoubleSpinBox()
+        self.um_per_px_input.setRange(0.1, 100.0)
+        self.um_per_px_input.setDecimals(2)
+        self.um_per_px_input.setValue(10.0)
+        self.spot_diameter_min_input = QDoubleSpinBox()
+        self.spot_diameter_min_input.setRange(1.0, 1000.0)
+        self.spot_diameter_min_input.setDecimals(1)
+        self.spot_diameter_min_input.setValue(40.0)
+        self.spot_diameter_max_input = QDoubleSpinBox()
+        self.spot_diameter_max_input.setRange(2.0, 2000.0)
+        self.spot_diameter_max_input.setDecimals(1)
+        self.spot_diameter_max_input.setValue(240.0)
         self.spacing_min_input = QSpinBox()
         self.spacing_min_input.setRange(0, 300)
         self.spacing_min_input.setValue(0)
@@ -99,9 +106,11 @@ class MainWindow(QMainWindow):
         control_row.addWidget(analyze_btn)
 
         detect_row = QHBoxLayout()
-        detect_row.addWidget(QLabel("Dia Min(px)"))
+        detect_row.addWidget(QLabel("um/px"))
+        detect_row.addWidget(self.um_per_px_input)
+        detect_row.addWidget(QLabel("Dia Min(um)"))
         detect_row.addWidget(self.spot_diameter_min_input)
-        detect_row.addWidget(QLabel("Dia Max(px)"))
+        detect_row.addWidget(QLabel("Dia Max(um)"))
         detect_row.addWidget(self.spot_diameter_max_input)
         detect_row.addWidget(QLabel("Pitch Min(px)"))
         detect_row.addWidget(self.spacing_min_input)
@@ -278,19 +287,28 @@ class MainWindow(QMainWindow):
             }
         }
 
+    def _spot_diameter_px_range(self) -> tuple[float, float]:
+        um_per_px = max(0.1, float(self.um_per_px_input.value()))
+        dmin_um = float(self.spot_diameter_min_input.value())
+        dmax_um = float(self.spot_diameter_max_input.value())
+        dmin_px = max(1.0, dmin_um / um_per_px)
+        dmax_px = max(dmin_px + 0.5, dmax_um / um_per_px)
+        return dmin_px, dmax_px
+
     def _run_analysis_and_render(self) -> None:
         if not self.current_image_path:
             return
 
         rows = int(self.rows_input.value())
         cols = int(self.cols_input.value())
+        dia_min_px, dia_max_px = self._spot_diameter_px_range()
         result = run_analysis(
             self.current_image_path,
             rows=rows,
             cols=cols,
             grid_shift=(self.grid_shift_x, self.grid_shift_y),
-            spot_diameter_min_px=float(self.spot_diameter_min_input.value()),
-            spot_diameter_max_px=float(self.spot_diameter_max_input.value()),
+            spot_diameter_min_px=dia_min_px,
+            spot_diameter_max_px=dia_max_px,
             spacing_min_px=float(self.spacing_min_input.value()),
             spacing_max_px=float(self.spacing_max_input.value()),
         )
@@ -378,6 +396,7 @@ class MainWindow(QMainWindow):
         rows = int(self.rows_input.value())
         cols = int(self.cols_input.value())
         template_path = self.template_input.text().strip() or None
+        dia_min_px, dia_max_px = self._spot_diameter_px_range()
 
         self.batch_progress.setMaximum(len(image_files))
         self.batch_progress.setValue(0)
@@ -392,8 +411,8 @@ class MainWindow(QMainWindow):
                 output_dir=output_dir,
                 channel=None,
                 ai_model=None,
-                spot_diameter_min_px=float(self.spot_diameter_min_input.value()),
-                spot_diameter_max_px=float(self.spot_diameter_max_input.value()),
+                spot_diameter_min_px=dia_min_px,
+                spot_diameter_max_px=dia_max_px,
                 spacing_min_px=float(self.spacing_min_input.value()),
                 spacing_max_px=float(self.spacing_max_input.value()),
             )

@@ -27,8 +27,9 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--output-dir", required=True)
     analyze.add_argument("--channel", required=False, type=int)
     analyze.add_argument("--ai-model", required=False, help="Optional ONNX model path")
-    analyze.add_argument("--spot-diameter-min", required=False, type=float, default=4.0)
-    analyze.add_argument("--spot-diameter-max", required=False, type=float, default=24.0)
+    analyze.add_argument("--um-per-pixel", required=False, type=float, default=10.0)
+    analyze.add_argument("--spot-diameter-min-um", required=False, type=float, default=40.0)
+    analyze.add_argument("--spot-diameter-max-um", required=False, type=float, default=240.0)
     analyze.add_argument("--spot-spacing-min", required=False, type=float, default=0.0)
     analyze.add_argument("--spot-spacing-max", required=False, type=float, default=0.0)
 
@@ -40,8 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("--output-dir", required=True)
     batch.add_argument("--channel", required=False, type=int)
     batch.add_argument("--ai-model", required=False)
-    batch.add_argument("--spot-diameter-min", required=False, type=float, default=4.0)
-    batch.add_argument("--spot-diameter-max", required=False, type=float, default=24.0)
+    batch.add_argument("--um-per-pixel", required=False, type=float, default=10.0)
+    batch.add_argument("--spot-diameter-min-um", required=False, type=float, default=40.0)
+    batch.add_argument("--spot-diameter-max-um", required=False, type=float, default=240.0)
     batch.add_argument("--spot-spacing-min", required=False, type=float, default=0.0)
     batch.add_argument("--spot-spacing-max", required=False, type=float, default=0.0)
 
@@ -89,6 +91,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
+    um_per_px = max(0.1, float(args.um_per_pixel))
+    dia_min_px = max(1.0, float(args.spot_diameter_min_um) / um_per_px)
+    dia_max_px = max(dia_min_px + 0.5, float(args.spot_diameter_max_um) / um_per_px)
     out = analyze_one_image(
         image_path=args.image,
         rows=args.rows,
@@ -97,8 +102,8 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         output_dir=args.output_dir,
         channel=args.channel,
         ai_model=args.ai_model,
-        spot_diameter_min_px=args.spot_diameter_min,
-        spot_diameter_max_px=args.spot_diameter_max,
+        spot_diameter_min_px=dia_min_px,
+        spot_diameter_max_px=dia_max_px,
         spacing_min_px=args.spot_spacing_min,
         spacing_max_px=args.spot_spacing_max,
     )
@@ -111,6 +116,9 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
 
 
 def _cmd_analyze_batch(args: argparse.Namespace) -> int:
+    um_per_px = max(0.1, float(args.um_per_pixel))
+    dia_min_px = max(1.0, float(args.spot_diameter_min_um) / um_per_px)
+    dia_max_px = max(dia_min_px + 0.5, float(args.spot_diameter_max_um) / um_per_px)
     rows, summary_csv, summary_json = analyze_batch_images(
         input_dir=args.input_dir,
         rows=args.rows,
@@ -119,8 +127,8 @@ def _cmd_analyze_batch(args: argparse.Namespace) -> int:
         output_dir=args.output_dir,
         channel=args.channel,
         ai_model=args.ai_model,
-        spot_diameter_min_px=args.spot_diameter_min,
-        spot_diameter_max_px=args.spot_diameter_max,
+        spot_diameter_min_px=dia_min_px,
+        spot_diameter_max_px=dia_max_px,
         spacing_min_px=args.spot_spacing_min,
         spacing_max_px=args.spot_spacing_max,
     )

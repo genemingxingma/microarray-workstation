@@ -9,7 +9,7 @@ MicroarrayWorkstation is a cross-platform desktop tool (Windows/Linux) for micro
 - Local peak refinement around predicted grid positions
 - Manual grid shift correction in GUI (left/right/up/down)
 - Detection parameter tuning in GUI/CLI:
-  - spot diameter min/max (px)
+  - spot diameter min/max (um, with um/px conversion)
   - spot spacing min/max (px)
 - Quantify foreground/background grayscale per spot
 - Compute chip-level QC metrics (`mean_snr`, `pass_rate_pct`, `qc_status`)
