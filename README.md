@@ -11,6 +11,8 @@ MicroarrayWorkstation is a cross-platform desktop tool (Windows/Linux) for micro
 - Detection parameter tuning in GUI/CLI:
   - spot diameter min/max (um, with um/px conversion)
   - spot spacing min/max (px)
+  - background mode (`local` / `global`) and global background percentile
+  - configurable flag thresholds (`SNR`, saturation %, net signal)
 - Quantify foreground/background grayscale per spot
 - Compute chip-level QC metrics (`mean_snr`, `pass_rate_pct`, `qc_status`)
 - AI spot confidence scoring:

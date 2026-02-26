@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QComboBox,
     QProgressBar,
     QPushButton,
     QSpinBox,
@@ -93,6 +94,24 @@ class MainWindow(QMainWindow):
         self.spacing_max_input = QSpinBox()
         self.spacing_max_input.setRange(0, 500)
         self.spacing_max_input.setValue(0)
+        self.background_mode_input = QComboBox()
+        self.background_mode_input.addItems(["local", "global"])
+        self.global_bg_percentile_input = QDoubleSpinBox()
+        self.global_bg_percentile_input.setRange(0.0, 100.0)
+        self.global_bg_percentile_input.setDecimals(1)
+        self.global_bg_percentile_input.setValue(20.0)
+        self.low_snr_threshold_input = QDoubleSpinBox()
+        self.low_snr_threshold_input.setRange(0.0, 100.0)
+        self.low_snr_threshold_input.setDecimals(2)
+        self.low_snr_threshold_input.setValue(1.5)
+        self.saturation_threshold_input = QDoubleSpinBox()
+        self.saturation_threshold_input.setRange(0.0, 100.0)
+        self.saturation_threshold_input.setDecimals(1)
+        self.saturation_threshold_input.setValue(5.0)
+        self.low_net_threshold_input = QDoubleSpinBox()
+        self.low_net_threshold_input.setRange(-10000.0, 100000.0)
+        self.low_net_threshold_input.setDecimals(1)
+        self.low_net_threshold_input.setValue(0.0)
 
         analyze_btn = QPushButton("Analyze")
         analyze_btn.clicked.connect(self.on_analyze)
@@ -116,6 +135,16 @@ class MainWindow(QMainWindow):
         detect_row.addWidget(self.spacing_min_input)
         detect_row.addWidget(QLabel("Pitch Max(px)"))
         detect_row.addWidget(self.spacing_max_input)
+        detect_row.addWidget(QLabel("BG"))
+        detect_row.addWidget(self.background_mode_input)
+        detect_row.addWidget(QLabel("BG pctl"))
+        detect_row.addWidget(self.global_bg_percentile_input)
+        detect_row.addWidget(QLabel("SNR<"))
+        detect_row.addWidget(self.low_snr_threshold_input)
+        detect_row.addWidget(QLabel("Sat%>"))
+        detect_row.addWidget(self.saturation_threshold_input)
+        detect_row.addWidget(QLabel("Net<"))
+        detect_row.addWidget(self.low_net_threshold_input)
 
         adjust_row = QHBoxLayout()
         self.shift_step_input = QSpinBox()
@@ -320,6 +349,11 @@ class MainWindow(QMainWindow):
             spot_diameter_max_px=dia_max_px,
             spacing_min_px=float(self.spacing_min_input.value()),
             spacing_max_px=float(self.spacing_max_input.value()),
+            background_mode=self.background_mode_input.currentText(),
+            global_background_percentile=float(self.global_bg_percentile_input.value()),
+            low_snr_threshold=float(self.low_snr_threshold_input.value()),
+            saturation_threshold_pct=float(self.saturation_threshold_input.value()),
+            low_net_threshold=float(self.low_net_threshold_input.value()),
         )
         df = to_dataframe(result)
         if self.current_gray is None:
@@ -424,6 +458,11 @@ class MainWindow(QMainWindow):
                 spot_diameter_max_px=dia_max_px,
                 spacing_min_px=float(self.spacing_min_input.value()),
                 spacing_max_px=float(self.spacing_max_input.value()),
+                background_mode=self.background_mode_input.currentText(),
+                global_background_percentile=float(self.global_bg_percentile_input.value()),
+                low_snr_threshold=float(self.low_snr_threshold_input.value()),
+                saturation_threshold_pct=float(self.saturation_threshold_input.value()),
+                low_net_threshold=float(self.low_net_threshold_input.value()),
             )
             batch_rows.append(
                 {

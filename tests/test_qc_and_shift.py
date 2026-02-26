@@ -63,3 +63,24 @@ def test_detection_params_are_accepted(tmp_path: Path) -> None:
     assert len(df) == 96
     det = r.metadata.get("detection_params", {})
     assert det.get("spot_diameter_min_px") == 6.0
+
+
+def test_global_background_mode_and_flag_thresholds(tmp_path: Path) -> None:
+    p = tmp_path / "chip_global_bg.tif"
+    _synthetic(p)
+
+    r = run_analysis(
+        p,
+        rows=8,
+        cols=12,
+        background_mode="global",
+        global_background_percentile=30.0,
+        low_snr_threshold=2.0,
+        saturation_threshold_pct=2.0,
+        low_net_threshold=200.0,
+    )
+    df = to_dataframe(r)
+    assert len(df) == 96
+    det = r.metadata.get("detection_params", {})
+    assert det.get("background_mode") == "global"
+    assert "LOW_NET" in set(df["flag"]) or "LOW_SNR" in set(df["flag"])

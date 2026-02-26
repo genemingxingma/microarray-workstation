@@ -27,6 +27,11 @@ def run_analysis(
     spot_diameter_max_px: float = 24.0,
     spacing_min_px: float = 0.0,
     spacing_max_px: float = 0.0,
+    background_mode: str = "local",
+    global_background_percentile: float = 20.0,
+    low_snr_threshold: float = 1.5,
+    saturation_threshold_pct: float = 5.0,
+    low_net_threshold: float = 0.0,
 ) -> AnalysisResult:
     gray = load_image(image_path, channel=channel)
     prep = preprocess(gray)
@@ -51,7 +56,18 @@ def run_analysis(
     if grid_shift != (0.0, 0.0):
         grid = shift_grid(grid, dx=float(grid_shift[0]), dy=float(grid_shift[1]))
         refined = shift_grid(refined, dx=float(grid_shift[0]), dy=float(grid_shift[1]))
-    measurements = quantify_spots(gray, grid, rows=rows, cols=cols, sample_spots=refined)
+    measurements = quantify_spots(
+        gray,
+        grid,
+        rows=rows,
+        cols=cols,
+        sample_spots=refined,
+        background_mode=background_mode,
+        global_background_percentile=global_background_percentile,
+        low_snr_threshold=low_snr_threshold,
+        saturation_threshold_pct=saturation_threshold_pct,
+        low_net_threshold=low_net_threshold,
+    )
     df = _measurements_to_df(measurements)
     qc = compute_qc_metrics(df)
 
@@ -70,6 +86,11 @@ def run_analysis(
                 "spot_diameter_max_px": float(spot_diameter_max_px),
                 "spacing_min_px": float(spacing_min_px),
                 "spacing_max_px": float(spacing_max_px),
+                "background_mode": background_mode,
+                "global_background_percentile": float(global_background_percentile),
+                "low_snr_threshold": float(low_snr_threshold),
+                "saturation_threshold_pct": float(saturation_threshold_pct),
+                "low_net_threshold": float(low_net_threshold),
             },
             "grid_bbox": {
                 "x_min": float(min(s.x for s in grid)) if grid else 0.0,

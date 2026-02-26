@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     analyze.add_argument("--spot-diameter-max-um", required=False, type=float, default=240.0)
     analyze.add_argument("--spot-spacing-min", required=False, type=float, default=0.0)
     analyze.add_argument("--spot-spacing-max", required=False, type=float, default=0.0)
+    analyze.add_argument("--background-mode", required=False, choices=["local", "global"], default="local")
+    analyze.add_argument("--global-bg-percentile", required=False, type=float, default=20.0)
+    analyze.add_argument("--low-snr-threshold", required=False, type=float, default=1.5)
+    analyze.add_argument("--saturation-threshold-pct", required=False, type=float, default=5.0)
+    analyze.add_argument("--low-net-threshold", required=False, type=float, default=0.0)
 
     batch = sub.add_parser("analyze-batch", help="Batch analyze all chip images in a directory")
     batch.add_argument("--input-dir", required=True)
@@ -46,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
     batch.add_argument("--spot-diameter-max-um", required=False, type=float, default=240.0)
     batch.add_argument("--spot-spacing-min", required=False, type=float, default=0.0)
     batch.add_argument("--spot-spacing-max", required=False, type=float, default=0.0)
+    batch.add_argument("--background-mode", required=False, choices=["local", "global"], default="local")
+    batch.add_argument("--global-bg-percentile", required=False, type=float, default=20.0)
+    batch.add_argument("--low-snr-threshold", required=False, type=float, default=1.5)
+    batch.add_argument("--saturation-threshold-pct", required=False, type=float, default=5.0)
+    batch.add_argument("--low-net-threshold", required=False, type=float, default=0.0)
 
     submit = sub.add_parser("submit-lims", help="Submit interpreted result to generic LIMS REST endpoint")
     submit.add_argument("--base-url", required=True)
@@ -106,6 +116,11 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         spot_diameter_max_px=dia_max_px,
         spacing_min_px=args.spot_spacing_min,
         spacing_max_px=args.spot_spacing_max,
+        background_mode=args.background_mode,
+        global_background_percentile=args.global_bg_percentile,
+        low_snr_threshold=args.low_snr_threshold,
+        saturation_threshold_pct=args.saturation_threshold_pct,
+        low_net_threshold=args.low_net_threshold,
     )
 
     print(f"raw_csv={out['raw_csv']}")
@@ -131,6 +146,11 @@ def _cmd_analyze_batch(args: argparse.Namespace) -> int:
         spot_diameter_max_px=dia_max_px,
         spacing_min_px=args.spot_spacing_min,
         spacing_max_px=args.spot_spacing_max,
+        background_mode=args.background_mode,
+        global_background_percentile=args.global_bg_percentile,
+        low_snr_threshold=args.low_snr_threshold,
+        saturation_threshold_pct=args.saturation_threshold_pct,
+        low_net_threshold=args.low_net_threshold,
     )
 
     for row in rows:

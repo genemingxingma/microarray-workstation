@@ -33,6 +33,11 @@ def analyze_one_image(
     spot_diameter_max_px: float = 24.0,
     spacing_min_px: float = 0.0,
     spacing_max_px: float = 0.0,
+    background_mode: str = "local",
+    global_background_percentile: float = 20.0,
+    low_snr_threshold: float = 1.5,
+    saturation_threshold_pct: float = 5.0,
+    low_net_threshold: float = 0.0,
 ) -> dict[str, Any]:
     result = run_analysis(
         image_path,
@@ -43,6 +48,11 @@ def analyze_one_image(
         spot_diameter_max_px=spot_diameter_max_px,
         spacing_min_px=spacing_min_px,
         spacing_max_px=spacing_max_px,
+        background_mode=background_mode,
+        global_background_percentile=global_background_percentile,
+        low_snr_threshold=low_snr_threshold,
+        saturation_threshold_pct=saturation_threshold_pct,
+        low_net_threshold=low_net_threshold,
     )
     df = to_dataframe(result)
 
@@ -113,6 +123,11 @@ def analyze_batch_images(
     spot_diameter_max_px: float = 24.0,
     spacing_min_px: float = 0.0,
     spacing_max_px: float = 0.0,
+    background_mode: str = "local",
+    global_background_percentile: float = 20.0,
+    low_snr_threshold: float = 1.5,
+    saturation_threshold_pct: float = 5.0,
+    low_net_threshold: float = 0.0,
 ) -> tuple[list[dict[str, Any]], str, str]:
     source = Path(input_dir)
     if not source.exists() or not source.is_dir():
@@ -139,6 +154,11 @@ def analyze_batch_images(
             spot_diameter_max_px=spot_diameter_max_px,
             spacing_min_px=spacing_min_px,
             spacing_max_px=spacing_max_px,
+            background_mode=background_mode,
+            global_background_percentile=global_background_percentile,
+            low_snr_threshold=low_snr_threshold,
+            saturation_threshold_pct=saturation_threshold_pct,
+            low_net_threshold=low_net_threshold,
         )
         rows_out.append(
             {

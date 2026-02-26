@@ -24,10 +24,19 @@ def quantify_spots(
     rows: int,
     cols: int,
     sample_spots: list[Spot] | None = None,
+    background_mode: str = "local",
+    global_background_percentile: float = 20.0,
+    low_snr_threshold: float = 1.5,
+    saturation_threshold_pct: float = 5.0,
+    low_net_threshold: float = 0.0,
 ) -> list[SpotMeasurement]:
     h, w = gray.shape
     arr = gray.astype(np.float32)
     max_val = 65535.0 if gray.dtype in (np.uint16,) else float(np.max(arr) if np.max(arr) > 0 else 255.0)
+
+    if background_mode not in {"local", "global"}:
+        background_mode = "local"
+    global_bg_val = float(np.percentile(arr, max(0.0, min(global_background_percentile, 100.0))))
 
     results: list[SpotMeasurement] = []
     for idx, spot in enumerate(spots):
@@ -47,8 +56,12 @@ def quantify_spots(
 
         fg_mean = float(np.mean(fg_vals))
         fg_median = float(np.median(fg_vals))
-        bg_mean = float(np.mean(bg_vals))
-        bg_median = float(np.median(bg_vals))
+        if background_mode == "global":
+            bg_mean = global_bg_val
+            bg_median = global_bg_val
+        else:
+            bg_mean = float(np.mean(bg_vals))
+            bg_median = float(np.median(bg_vals))
         net_mean = fg_mean - bg_mean
         net_median = fg_median - bg_median
         snr = float(net_mean / (np.std(bg_vals) + 1e-6))
@@ -56,7 +69,13 @@ def quantify_spots(
 
         row = idx // cols + 1
         col = idx % cols + 1
-        flag = "SATURATED" if saturated_pct > 5.0 else "LOW_SNR" if snr < 1.5 else "OK"
+        flag = "OK"
+        if saturated_pct > saturation_threshold_pct:
+            flag = "SATURATED"
+        elif snr < low_snr_threshold:
+            flag = "LOW_SNR"
+        elif net_median < low_net_threshold:
+            flag = "LOW_NET"
 
         results.append(
             SpotMeasurement(
