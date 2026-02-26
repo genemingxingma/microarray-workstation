@@ -10,9 +10,13 @@ MicroarrayWorkstation is a cross-platform desktop tool (Windows/Linux) for micro
 - Manual grid shift correction in GUI (left/right/up/down)
 - Quantify foreground/background grayscale per spot
 - Compute chip-level QC metrics (`mean_snr`, `pass_rate_pct`, `qc_status`)
+- AI spot confidence scoring:
+  - Heuristic quality scoring (default)
+  - Optional ONNX model inference with automatic fallback to heuristic
 - Generate interpretation calls from YAML templates
 - Export raw and interpreted results (`CSV` + `JSON`)
 - Submit interpreted results to LIMS via REST API
+- Batch analysis mode for directories of chip images
 - GUI and CLI workflows
 
 ## Quick start
@@ -35,10 +39,20 @@ microarray-cli analyze \
   --cols 48
 ```
 
+Batch example:
+
+```bash
+microarray-cli analyze-batch \
+  --input-dir /path/to/chips \
+  --output-dir ./outputs \
+  --rows 48 \
+  --cols 48
+```
+
 ## Architecture
 
 - `src/microarray_workstation/ui`: PySide6 desktop interface
-- `src/microarray_workstation/analysis`: image processing and quantification pipeline
+- `src/microarray_workstation/analysis`: image processing, quantification, QC, AI scoring
 - `src/microarray_workstation/rules`: template-driven interpretation engine
 - `src/microarray_workstation/integration`: LIMS API connector
 - `src/microarray_workstation/io`: export utilities
