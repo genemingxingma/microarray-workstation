@@ -58,11 +58,12 @@ class LaboratoryManagementInterfaceClient:
         retries: int = 3,
     ) -> dict[str, Any]:
         url = f"{self.base_url}/lab/interface/inbound/{endpoint_code}"
-        body: dict[str, Any] = {"message_type": message_type, "payload": payload}
+        params: dict[str, Any] = {"message_type": message_type, "payload": payload}
         if external_uid:
-            body["external_uid"] = external_uid
+            params["external_uid"] = external_uid
         if raw_message:
-            body["raw_message"] = raw_message
+            params["raw_message"] = raw_message
+        body: dict[str, Any] = {"jsonrpc": "2.0", "method": "call", "params": params}
 
         headers = self._headers()
         last_err: Exception | None = None
@@ -71,7 +72,10 @@ class LaboratoryManagementInterfaceClient:
             try:
                 resp = requests.post(url, headers=headers, json=body, timeout=self.timeout_sec)
                 resp.raise_for_status()
-                parsed = self._unwrap_response(resp.json())
+                payload_json = resp.json()
+                if isinstance(payload_json, dict) and payload_json.get("error"):
+                    raise RuntimeError(f"Endpoint error: {payload_json['error']}")
+                parsed = self._unwrap_response(payload_json)
                 ack = str(parsed.get("ack_code") or "")
                 ok = bool(parsed.get("ok", ack == "AA"))
                 if not ok or ack in {"AE", "AR"}:

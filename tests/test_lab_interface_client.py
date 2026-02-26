@@ -45,8 +45,10 @@ def test_submit_inbound_ack_ok(monkeypatch) -> None:
 
     assert captured["url"].endswith("/lab/interface/inbound/HIS-REST")
     assert captured["headers"]["X-API-Key"] == "demo-key"
-    assert captured["json"]["message_type"] == "result"
-    assert captured["json"]["payload"]["accession"] == "ACC-1"
+    assert captured["json"]["jsonrpc"] == "2.0"
+    assert captured["json"]["method"] == "call"
+    assert captured["json"]["params"]["message_type"] == "result"
+    assert captured["json"]["params"]["payload"]["accession"] == "ACC-1"
     assert resp["ack_code"] == "AA"
 
 
