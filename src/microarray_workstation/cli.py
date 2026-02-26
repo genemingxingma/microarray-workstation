@@ -155,12 +155,7 @@ def _cmd_submit_lab_interface(args: argparse.Namespace) -> int:
         "results": data.get("results") or [],
     }
     client = _lab_client_from_args(args)
-    resp = client.submit_inbound(
-        endpoint_code=args.endpoint_code,
-        message_type="result",
-        payload=payload,
-        external_uid=f"MW-{payload['accession']}",
-    )
+    resp = client.submit_result_auto(endpoint_code=args.endpoint_code, payload=payload, external_uid=f"MW-{payload['accession']}")
     print(resp)
     return 0
 
@@ -168,7 +163,7 @@ def _cmd_submit_lab_interface(args: argparse.Namespace) -> int:
 def _cmd_submit_lab_interface_batch(args: argparse.Namespace) -> int:
     jobs = build_lab_interface_jobs_from_summaries(args.input_dir)
     client = _lab_client_from_args(args)
-    result = client.submit_batch_inbound(endpoint_code=args.endpoint_code, jobs=jobs)
+    result = client.submit_batch_result_auto(endpoint_code=args.endpoint_code, jobs=jobs)
 
     out_path = Path(args.output) if args.output else Path(args.input_dir) / "lab_interface_submit_summary.json"
     export_json(result, out_path)

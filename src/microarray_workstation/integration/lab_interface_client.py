@@ -89,6 +89,66 @@ class LaboratoryManagementInterfaceClient:
 
         raise RuntimeError(f"Failed to submit inbound interface after {retries} attempts: {last_err}")
 
+    def submit_external_result_push(
+        self,
+        endpoint_code: str,
+        *,
+        payload: dict[str, Any],
+        external_uid: str | None = None,
+        retries: int = 3,
+    ) -> dict[str, Any]:
+        url = f"{self.base_url}/lab/api/v1/{endpoint_code}/results"
+        body: dict[str, Any] = {"accession": payload.get("accession"), "results": payload.get("results") or []}
+        if payload.get("meta") is not None:
+            body["meta"] = payload.get("meta")
+        if external_uid:
+            body["external_uid"] = external_uid
+
+        headers = self._headers()
+        last_err: Exception | None = None
+
+        for attempt in range(1, retries + 1):
+            try:
+                resp = requests.post(url, headers=headers, json=body, timeout=self.timeout_sec)
+                resp.raise_for_status()
+                parsed = resp.json() if resp.content else {}
+                if not isinstance(parsed, dict):
+                    raise RuntimeError(f"unexpected_response: {type(parsed)}")
+                if not parsed.get("ok", False):
+                    raise RuntimeError(f"Rejected by external API: {parsed.get('error') or parsed}")
+                return parsed
+            except Exception as exc:  # noqa: BLE001
+                last_err = exc
+                if attempt < retries:
+                    time.sleep(1.2 * attempt)
+                continue
+
+        raise RuntimeError(f"Failed to submit external result push after {retries} attempts: {last_err}")
+
+    def submit_result_auto(
+        self,
+        endpoint_code: str,
+        *,
+        payload: dict[str, Any],
+        external_uid: str | None = None,
+        retries: int = 3,
+    ) -> dict[str, Any]:
+        try:
+            return self.submit_external_result_push(
+                endpoint_code=endpoint_code,
+                payload=payload,
+                external_uid=external_uid,
+                retries=retries,
+            )
+        except Exception:
+            return self.submit_inbound(
+                endpoint_code=endpoint_code,
+                message_type="result",
+                payload=payload,
+                external_uid=external_uid,
+                retries=retries,
+            )
+
     def submit_batch_inbound(
         self,
         endpoint_code: str,
@@ -104,6 +164,35 @@ class LaboratoryManagementInterfaceClient:
                 resp = self.submit_inbound(
                     endpoint_code=endpoint_code,
                     message_type=message_type,
+                    payload=payload,
+                    external_uid=external_uid,
+                    retries=retries,
+                )
+                records.append({"source": source, "status": "ok", "response": resp})
+                success += 1
+            except Exception as exc:  # noqa: BLE001
+                records.append({"source": source, "status": "failed", "error": str(exc)})
+                failed += 1
+
+        return {"total": len(jobs), "success": success, "failed": failed, "records": records}
+
+    def submit_batch_result_auto(
+        self,
+        endpoint_code: str,
+        jobs: list[tuple[str, str, dict[str, Any], str | None]],
+        retries: int = 3,
+    ) -> dict[str, Any]:
+        records: list[dict[str, Any]] = []
+        success = 0
+        failed = 0
+
+        for source, message_type, payload, external_uid in jobs:
+            if message_type not in {"result", "report"}:
+                records.append({"source": source, "status": "skipped", "error": f"unsupported_message_type:{message_type}"})
+                continue
+            try:
+                resp = self.submit_result_auto(
+                    endpoint_code=endpoint_code,
                     payload=payload,
                     external_uid=external_uid,
                     retries=retries,

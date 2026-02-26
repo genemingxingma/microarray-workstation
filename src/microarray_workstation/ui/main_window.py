@@ -388,7 +388,7 @@ class MainWindow(QMainWindow):
                     auth_type="bearer" if token else "none",
                     token=token,
                 )
-                result = client.submit_batch_inbound(endpoint_code=endpoint, jobs=jobs)
+                result = client.submit_batch_result_auto(endpoint_code=endpoint, jobs=jobs)
                 out_path = Path(output_dir) / "lab_interface_submit_summary.json"
             export_json(result, out_path)
             self.log_info(
