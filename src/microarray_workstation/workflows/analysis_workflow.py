@@ -39,6 +39,20 @@ def analyze_one_image(
     tpl = load_template_or_default(template_path)
     interpreted = interpret(ai_df, tpl)
     summary = summarize_calls(interpreted)
+    accession = Path(image_path).stem
+    interface_results = []
+    for _, row in interpreted.iterrows():
+        service_code = str(row.get("target") or "").strip()
+        if not service_code or service_code == "UNASSIGNED":
+            service_code = f"R{int(row['row'])}C{int(row['col'])}"
+        result_text = str(row.get("call") or "")
+        note = (
+            f"snr={float(row.get('snr', 0.0)):.3f};"
+            f"net_median={float(row.get('net_median', 0.0)):.3f};"
+            f"ai={float(row.get('ai_score', 0.0)):.3f};"
+            f"flag={row.get('flag', '')}"
+        )
+        interface_results.append({"service_code": service_code, "result": result_text, "note": note})
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -53,11 +67,13 @@ def analyze_one_image(
 
     payload = {
         "image": result.image_path,
+        "accession": accession,
         "rows": result.rows,
         "cols": result.cols,
         "metadata": result.metadata,
         "summary": summary,
         "ai_summary": ai_summary,
+        "results": interface_results,
     }
     export_json(payload, summary_json)
 
@@ -138,3 +154,17 @@ def list_summary_payloads(input_dir: str) -> list[tuple[str, dict[str, Any]]]:
         payload = json.loads(f.read_text(encoding="utf-8"))
         out.append((str(f), payload))
     return out
+
+
+def build_lab_interface_jobs_from_summaries(input_dir: str) -> list[tuple[str, str, dict[str, Any], str | None]]:
+    summaries = list_summary_payloads(input_dir)
+    jobs: list[tuple[str, str, dict[str, Any], str | None]] = []
+    for source, data in summaries:
+        accession = str(data.get("accession") or Path(source).stem.replace("_summary", ""))
+        payload = {
+            "accession": accession,
+            "results": data.get("results") or [],
+        }
+        external_uid = f"MW-{accession}"
+        jobs.append((source, "result", payload, external_uid))
+    return jobs

@@ -29,11 +29,13 @@ from microarray_workstation.analysis.image_loader import load_image, normalize_t
 from microarray_workstation.analysis.pipeline import run_analysis, to_dataframe
 from microarray_workstation.analysis.ai_classifier import classify_spot_quality
 from microarray_workstation.integration.lims_client import LIMSClient
+from microarray_workstation.integration.lab_interface_client import LaboratoryManagementInterfaceClient
 from microarray_workstation.io.exporters import export_dataframe_csv, export_json
 from microarray_workstation.rules.interpreter import interpret, load_template, summarize_calls
 from microarray_workstation.workflows.analysis_workflow import (
     IMAGE_SUFFIXES,
     analyze_one_image,
+    build_lab_interface_jobs_from_summaries,
     list_summary_payloads,
 )
 
@@ -132,7 +134,7 @@ class MainWindow(QMainWindow):
         self.lims_base_url_input = QLineEdit()
         self.lims_base_url_input.setPlaceholderText("LIMS Base URL")
         self.lims_endpoint_input = QLineEdit()
-        self.lims_endpoint_input.setPlaceholderText("LIMS Endpoint, e.g. /api/results")
+        self.lims_endpoint_input.setPlaceholderText("LIMS Endpoint (/api/results) or Endpoint Code (HIS-REST)")
         self.lims_token_input = QLineEdit()
         self.lims_token_input.setPlaceholderText("Token (optional)")
         submit_batch_btn = QPushButton("Submit Batch To LIMS")
@@ -374,10 +376,20 @@ class MainWindow(QMainWindow):
             return
 
         try:
-            payloads = list_summary_payloads(output_dir)
-            client = LIMSClient(base_url=base_url, token=token)
-            result = client.submit_batch_results(endpoint=endpoint, payloads=payloads)
-            out_path = Path(output_dir) / "lims_submit_summary.json"
+            if endpoint.startswith("/"):
+                payloads = list_summary_payloads(output_dir)
+                client = LIMSClient(base_url=base_url, token=token)
+                result = client.submit_batch_results(endpoint=endpoint, payloads=payloads)
+                out_path = Path(output_dir) / "lims_submit_summary.json"
+            else:
+                jobs = build_lab_interface_jobs_from_summaries(output_dir)
+                client = LaboratoryManagementInterfaceClient(
+                    base_url=base_url,
+                    auth_type="bearer" if token else "none",
+                    token=token,
+                )
+                result = client.submit_batch_inbound(endpoint_code=endpoint, jobs=jobs)
+                out_path = Path(output_dir) / "lab_interface_submit_summary.json"
             export_json(result, out_path)
             self.log_info(
                 f"LIMS submit complete: total={result['total']} success={result['success']} failed={result['failed']}"

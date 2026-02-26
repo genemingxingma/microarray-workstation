@@ -18,6 +18,9 @@ MicroarrayWorkstation is a cross-platform desktop tool (Windows/Linux) for micro
 - Submit interpreted results to LIMS via REST API
 - Batch analysis mode for directories of chip images
 - Batch LIMS submission for `*_summary.json`
+- Native `laboratory_management` interface submission:
+  - `POST /lab/interface/inbound/<endpoint_code>`
+  - supports `none` / `bearer` / `api_key` / `basic` auth
 - GUI and CLI workflows
 
 ## Quick start
@@ -57,6 +60,17 @@ microarray-cli submit-lims-batch \
   --base-url http://lims.local \
   --endpoint /api/results \
   --input-dir ./outputs
+```
+
+Laboratory management inbound interface example:
+
+```bash
+microarray-cli submit-lab-interface-batch \
+  --base-url http://127.0.0.1:8069 \
+  --endpoint-code HIS-REST \
+  --input-dir ./outputs \
+  --auth-type bearer \
+  --token <TOKEN>
 ```
 
 ## Architecture
