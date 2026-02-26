@@ -7,6 +7,28 @@ import numpy as np
 import tifffile
 
 
+def _to_analysis_gray(img: np.ndarray, channel: int | None = None) -> np.ndarray:
+    if img.ndim != 3:
+        raise ValueError("Expected color image")
+
+    channels = img.shape[-1]
+    if channel is not None:
+        if channel < 0 or channel >= channels:
+            raise ValueError(f"Invalid channel {channel}, image has {channels} channels")
+        return img[..., channel]
+
+    rgb = img[..., :3].astype(np.float32)
+    if rgb.shape[-1] < 3:
+        return np.max(rgb, axis=2)
+
+    # Pseudo-color robust conversion:
+    # value channel preserves hot spots, luminance keeps structural contrast.
+    value = np.max(rgb, axis=2)
+    luminance = rgb[..., 0] * 0.114 + rgb[..., 1] * 0.587 + rgb[..., 2] * 0.299
+    merged = luminance * 0.85 + value * 0.15
+    return merged.astype(img.dtype if np.issubdtype(img.dtype, np.integer) else np.float32)
+
+
 def load_image(path: str | Path, channel: int | None = None) -> np.ndarray:
     p = Path(path)
     if not p.exists():
@@ -21,10 +43,7 @@ def load_image(path: str | Path, channel: int | None = None) -> np.ndarray:
         raise ValueError(f"Failed to load image: {p}")
 
     if img.ndim == 3:
-        idx = 0 if channel is None else channel
-        if idx < 0 or idx >= img.shape[-1]:
-            raise ValueError(f"Invalid channel {idx}, image has {img.shape[-1]} channels")
-        img = img[..., idx]
+        img = _to_analysis_gray(np.asarray(img), channel=channel)
 
     return np.asarray(img)
 
